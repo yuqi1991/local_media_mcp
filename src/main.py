@@ -242,6 +242,19 @@ if __name__ == "__main__":
     if auth_token:
         app.add_middleware(TokenAuthMiddleware, token=auth_token)
 
+    # Override host validation to allow any host
+    from starlette.datastructures import URL
+    from starlette.requests import ClientDisconnect
+
+    @app.middleware("http")
+    async def override_host_header(request, call_next):
+        # Skip host validation for proxy
+        request._headers = dict(request._headers)
+        return await call_next(request)
+
+    # 使用 Uvicorn
+    import uvicorn
+
     uvicorn.run(
         app,
         host=config._config.get("server", {}).get("host", "0.0.0.0"),
