@@ -6,7 +6,7 @@ from typing import List, Dict, Any
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from fastmcp import FastMCP
+from mcp import FastMCP
 from config import Config
 from tools.file_ops import (
     list_dir as _list_dir,
