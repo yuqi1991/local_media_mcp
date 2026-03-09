@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  media-mcp:
+    build: .
+    container_name: media-mcp
+    volumes:
+      - ./config:/app/config
+      - media:/media
+      - downloads:/downloads
+    ports:
+      - "8000:8000"
+    environment:
+      - MEDIA_DIR=/media
+      - DOWNLOAD_DIR=/downloads
+      - ARIA2_RPC_SECRET=${ARIA2_RPC_SECRET:-}
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
+      - TVDB_API_KEY=${TVDB_API_KEY:-}
+    restart: unless-stopped
+
+volumes:
+  media:
+  downloads:
