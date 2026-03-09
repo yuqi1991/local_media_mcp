@@ -2,6 +2,9 @@ import os
 import sys
 from pathlib import Path
 from typing import List, Dict, Any
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -25,6 +28,35 @@ from scrapers.douban_scraper import DoubanScraper
 from scrapers.base import MediaMetadata
 
 config = Config()
+
+# Token authentication middleware
+class TokenAuthMiddleware(BaseHTTPMiddleware):
+    def __init__(self, app, token: str = None):
+        super().__init__(app)
+        self.token = token
+
+    async def dispatch(self, request: Request, call_next):
+        # Skip auth if no token configured
+        if not self.token:
+            return await call_next(request)
+
+        # Check token from header
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            if token == self.token:
+                return await call_next(request)
+
+        # Also check query parameter for SSE connections
+        query_token = request.query_params.get("token")
+        if query_token == self.token:
+            return await call_next(request)
+
+        return JSONResponse(
+            {"error": "Unauthorized", "message": "Invalid or missing token"},
+            status_code=401
+        )
+
 
 # Initialize Aria2 manager
 aria2_manager = Aria2Manager(
@@ -202,8 +234,16 @@ def update_nfo(nfo_path: str, metadata: Dict[str, Any]) -> str:
 
 if __name__ == "__main__":
     import uvicorn
+
+    app = mcp.streamable_http_app()
+
+    # Add token auth middleware if configured
+    auth_token = os.environ.get("MCP_AUTH_TOKEN", os.environ.get("ARIA2_RPC_SECRET", ""))
+    if auth_token:
+        app.add_middleware(TokenAuthMiddleware, token=auth_token)
+
     uvicorn.run(
-        mcp.streamable_http_app(),
+        app,
         host=config._config.get("server", {}).get("host", "0.0.0.0"),
         port=config._config.get("server", {}).get("port", 8000)
     )

@@ -14,6 +14,7 @@ services:
       - MEDIA_DIR=/media
       - DOWNLOAD_DIR=/downloads
       - ARIA2_RPC_SECRET=${ARIA2_RPC_SECRET:-}
+      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN:-${ARIA2_RPC_SECRET:-}}
       - TMDB_API_KEY=${TMDB_API_KEY:-}
       - TVDB_API_KEY=${TVDB_API_KEY:-}
     restart: unless-stopped
