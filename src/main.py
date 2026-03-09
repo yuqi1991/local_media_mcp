@@ -16,8 +16,17 @@ from tools.file_ops import (
     create_dir as _create_dir,
     get_file_info as _get_file_info,
 )
+from tools.media_scanner import scan_media_library as _scan_media_library
+from tools.aria2_manager import Aria2Manager
 
 config = Config()
+
+# Initialize Aria2 manager
+aria2_manager = Aria2Manager(
+    host="localhost",
+    port=6800,
+    secret=config.aria2_secret
+)
 
 mcp = FastMCP("media-mcp")
 
@@ -56,6 +65,77 @@ def create_dir(path: str) -> Dict[str, str]:
 def get_file_info(path: str) -> Dict[str, Any]:
     """获取文件信息"""
     return _get_file_info(path)
+
+
+# Media library scanning
+@mcp.tool()
+def scan_media_library(path: str, recursive: bool = True) -> List[Dict[str, Any]]:
+    """扫描媒体库，返回所有媒体文件（视频+封面+nfo）"""
+    return _scan_media_library(path, recursive)
+
+
+# Download management
+@mcp.tool()
+def create_download(uri: str, filename: str = None, dir: str = None) -> Dict[str, Any]:
+    """创建下载任务"""
+    if dir is None:
+        dir = config.download_dir
+    return aria2_manager.create_download(uri, filename, dir)
+
+
+@mcp.tool()
+def list_downloads(status: str = None) -> List[Dict[str, Any]]:
+    """列出下载任务"""
+    return aria2_manager.list_downloads(status)
+
+
+@mcp.tool()
+def pause_download(gid: str) -> Dict[str, str]:
+    """暂停下载"""
+    return aria2_manager.pause_download(gid)
+
+
+@mcp.tool()
+def resume_download(gid: str) -> Dict[str, str]:
+    """恢复下载"""
+    return aria2_manager.resume_download(gid)
+
+
+@mcp.tool()
+def cancel_download(gid: str) -> Dict[str, str]:
+    """取消下载"""
+    return aria2_manager.cancel_download(gid)
+
+
+@mcp.tool()
+def get_download_status(gid: str) -> Dict[str, Any]:
+    """获取下载状态"""
+    return aria2_manager.get_download_status(gid)
+
+
+# Download configuration
+@mcp.tool()
+def get_aria2_config() -> Dict[str, Any]:
+    """获取当前 Aria2 配置"""
+    return aria2_manager.get_global_options()
+
+
+@mcp.tool()
+def set_aria2_speed_limit(download_limit: str = None, upload_limit: str = None) -> Dict[str, str]:
+    """设置下载/上传速度限制"""
+    return aria2_manager.set_speed_limit(download_limit, upload_limit)
+
+
+@mcp.tool()
+def get_bt_trackers() -> List[str]:
+    """获取当前 BT tracker 列表"""
+    return aria2_manager.get_bt_trackers()
+
+
+@mcp.tool()
+def update_bt_tracker(trackers: List[str]) -> Dict[str, Any]:
+    """更新 BT tracker 列表"""
+    return aria2_manager.update_bt_trackers(trackers)
 
 
 if __name__ == "__main__":
