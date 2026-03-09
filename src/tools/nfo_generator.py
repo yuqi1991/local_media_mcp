@@ -1,4 +1,8 @@
 import os
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import xml.etree.ElementTree as ET
 from typing import Dict, Any
 from dataclasses import asdict

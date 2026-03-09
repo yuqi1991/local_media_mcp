@@ -17,6 +17,9 @@ class DownloadInfo:
 
 class Aria2Manager:
     def __init__(self, host: str = "localhost", port: int = 6800, secret: str = ""):
+        # Add http:// if not already present
+        if not host.startswith("http"):
+            host = f"http://{host}"
         self.client = aria2p.API(
             aria2p.Client(host=host, port=port, secret=secret)
         )
