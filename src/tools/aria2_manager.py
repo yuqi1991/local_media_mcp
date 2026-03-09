@@ -88,7 +88,10 @@ class Aria2Manager:
 
     def get_global_options(self) -> Dict[str, Any]:
         """获取全局配置"""
-        return self.client.get_global_options()
+        opts = self.client.get_global_options()
+        if isinstance(opts, dict):
+            return opts
+        return opts.get_struct() if hasattr(opts, 'get_struct') else opts._struct
 
     def set_global_options(self, options: Dict[str, Any]) -> Dict[str, Any]:
         """设置全局配置"""

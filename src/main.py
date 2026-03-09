@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mcp.server import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from config import Config
 from tools.file_ops import (
     list_dir as _list_dir,
@@ -65,7 +66,13 @@ aria2_manager = Aria2Manager(
     secret=config.aria2_secret
 )
 
-mcp = FastMCP("media-mcp")
+mcp = FastMCP(
+    "media-mcp",
+    host="0.0.0.0",
+    transport_security=TransportSecuritySettings(
+        enable_dns_rebinding_protection=False,
+    ),
+)
 
 
 @mcp.tool()
