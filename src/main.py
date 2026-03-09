@@ -18,6 +18,11 @@ from tools.file_ops import (
 )
 from tools.media_scanner import scan_media_library as _scan_media_library
 from tools.aria2_manager import Aria2Manager
+from tools.nfo_generator import generate_nfo as _generate_nfo, read_nfo as _read_nfo, update_nfo as _update_nfo
+from scrapers.tmdb_scraper import TMDbScraper
+from scrapers.tvdb_scraper import TVDbScraper
+from scrapers.douban_scraper import DoubanScraper
+from scrapers.base import MediaMetadata
 
 config = Config()
 
@@ -136,6 +141,63 @@ def get_bt_trackers() -> List[str]:
 def update_bt_tracker(trackers: List[str]) -> Dict[str, Any]:
     """更新 BT tracker 列表"""
     return aria2_manager.update_bt_trackers(trackers)
+
+
+# Metadata scraping
+@mcp.tool()
+def scrape_metadata(filename: str, source: str = "tmdb", year: int = None) -> List[Dict[str, Any]]:
+    """在线削刮元数据（TMDB/TVDB/豆瓣）"""
+    from dataclasses import asdict
+    query = os.path.splitext(os.path.basename(filename))[0]
+
+    if source == "tmdb":
+        scraper = TMDbScraper(config.tmdb_api_key)
+        return [asdict(m) for m in scraper.search(query, year)]
+    elif source == "tvdb":
+        scraper = TVDbScraper(config.tvdb_api_key)
+        return [asdict(m) for m in scraper.search(query, year)]
+    elif source == "douban":
+        scraper = DoubanScraper()
+        return [asdict(m) for m in scraper.search(query, year)]
+    else:
+        raise ValueError(f"Unknown source: {source}")
+
+
+@mcp.tool()
+def manual_metadata(media_path: str, metadata: Dict[str, Any]) -> str:
+    """手动填写元数据并写入 nfo"""
+    meta = MediaMetadata(**metadata)
+    return _generate_nfo(meta, media_path)
+
+
+@mcp.tool()
+def download_poster(poster_url: str, media_path: str) -> str:
+    """下载封面图片"""
+    import requests
+    from PIL import Image
+    from io import BytesIO
+
+    resp = requests.get(poster_url)
+    img = Image.open(BytesIO(resp.content))
+
+    base_name = os.path.splitext(media_path)[0]
+    poster_path = f"{base_name}-poster.jpg"
+
+    img.save(poster_path)
+    return poster_path
+
+
+@mcp.tool()
+def read_nfo_file(nfo_path: str) -> Dict[str, Any]:
+    """读取 NFO 文件"""
+    return _read_nfo(nfo_path)
+
+
+@mcp.tool()
+def update_nfo(nfo_path: str, metadata: Dict[str, Any]) -> str:
+    """更新 NFO 文件"""
+    meta = MediaMetadata(**metadata)
+    return _update_nfo(nfo_path, meta)
 
 
 if __name__ == "__main__":
