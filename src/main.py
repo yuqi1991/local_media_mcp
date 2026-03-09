@@ -9,7 +9,7 @@ from starlette.responses import JSONResponse
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from mcp import FastMCP
+from mcp.server import FastMCP
 from config import Config
 from tools.file_ops import (
     list_dir as _list_dir,

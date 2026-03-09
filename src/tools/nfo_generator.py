@@ -2,7 +2,7 @@ import os
 import xml.etree.ElementTree as ET
 from typing import Dict, Any
 from dataclasses import asdict
-from ..scrapers.base import MediaMetadata
+from scrapers.base import MediaMetadata
 
 
 def generate_nfo(metadata: MediaMetadata, media_path: str, media_type: str = "movie") -> str:
