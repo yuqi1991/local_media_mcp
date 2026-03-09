@@ -43,6 +43,33 @@
 - Aria2 (下载器)
 - ElementTree (NFO 生成)
 
+## Docker 镜像
+
+镜像已自动构建并推送到 GitHub Container Registry。
+
+### 使用预构建镜像
+
+```bash
+# 拉取镜像
+docker pull ghcr.io/yuqi1991/local_media_mcp:latest
+
+# 运行
+docker run -d \
+  --name media-mcp \
+  -v /path/to/media:/media \
+  -v /path/to/downloads:/downloads \
+  -p 8000:8000 \
+  -e ARIA2_RPC_SECRET=your_secret \
+  -e TMDB_API_KEY=your_key \
+  ghcr.io/yuqi1991/local_media_mcp:latest
+```
+
+### 版本标签
+
+- `latest` - 最新稳定版
+- `v1.0.0` - 语义化版本
+- `sha-xxxxxxx` - 指定提交
+
 ## 快速开始
 
 ### 1. 配置环境变量
