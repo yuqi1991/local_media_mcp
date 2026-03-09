@@ -113,11 +113,24 @@ class Aria2Manager:
 
     def get_bt_trackers(self) -> List[str]:
         """获取 BT tracker 列表"""
-        opts = self.client.get_global_options()
-        return opts.get("bt-tracker", "").split(",") if opts.get("bt-tracker") else []
+        opts = self.get_global_options()
+        tracker_value = opts.get("bt-tracker")
+        if tracker_value is None and hasattr(self.client, "client"):
+            # Fallback to raw RPC response in case aria2p omits uncommon keys.
+            tracker_value = self.client.client.get_global_option().get("bt-tracker")
+        return tracker_value.split(",") if tracker_value else []
 
     def update_bt_trackers(self, trackers: List[str]) -> Dict[str, Any]:
-        """更新 BT tracker 列表"""
-        tracker_str = ",".join(trackers)
+        """更新 BT tracker 列表并校验写入结果"""
+        normalized = [tracker.strip() for tracker in trackers if tracker and tracker.strip()]
+        tracker_str = ",".join(normalized)
         self.client.set_global_options({"bt-tracker": tracker_str})
-        return {"trackers": trackers}
+
+        current = self.get_bt_trackers()
+        if current != normalized:
+            raise RuntimeError(
+                "Failed to persist bt-tracker setting: "
+                f"expected {len(normalized)} trackers, got {len(current)}"
+            )
+
+        return {"trackers": current}
