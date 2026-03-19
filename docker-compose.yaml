@@ -6,17 +6,17 @@ services:
     container_name: media-mcp
     volumes:
       - ./config:/app/config
-      - media:/media
+      - media:/media/jav
       - downloads:/downloads
     ports:
       - "8000:8000"
     environment:
-      - MEDIA_DIR=/media
+      - MEDIA_DIR=/media/jav
       - DOWNLOAD_DIR=/downloads
+      - SOURCE_DIR=/media/jav
+      - INDEX_PATH=/app/config/library_index.jsonl
       - ARIA2_RPC_SECRET=${ARIA2_RPC_SECRET:-}
       - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN:-${ARIA2_RPC_SECRET:-}}
-      - TMDB_API_KEY=${TMDB_API_KEY:-}
-      - TVDB_API_KEY=${TVDB_API_KEY:-}
     restart: unless-stopped
 
 volumes:
