@@ -38,10 +38,16 @@ class Video:
         # JAV专用字段存入extra
         if self.catalog_number:
             self.extra["catalog_number"] = self.catalog_number
+        elif "catalog_number" in self.extra:
+            self.catalog_number = self.extra["catalog_number"]
         if self.studio:
             self.extra["studio"] = self.studio
+        elif "studio" in self.extra:
+            self.studio = self.extra["studio"]
         if self.maker:
             self.extra["maker"] = self.maker
+        elif "maker" in self.extra:
+            self.maker = self.extra["maker"]
 
     def to_dict(self) -> Dict[str, Any]:
         d = {
