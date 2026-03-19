@@ -1,7 +1,7 @@
 import os
 import xml.etree.ElementTree as ET
 from typing import Dict, Any, List
-from models.video import Video
+from src.models.video import Video
 
 def generate_nfo(video: Video, media_path: str = None, media_type: str = "movie") -> str:
     """生成 Jellyfin 兼容的 NFO 文件"""

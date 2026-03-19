@@ -11,11 +11,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from mcp.server import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
-from config import Config
-from models.library import Library
-from tools.download import DownloadManager
-from tools.nfo_generator import generate_nfo, read_nfo, update_nfo
-from models.video import Video
+from src.config import Config
+from src.models.library import Library
+from src.tools.download import DownloadManager
+from src.tools.nfo_generator import generate_nfo, read_nfo, update_nfo
+from src.models.video import Video
 
 config = Config()
 

@@ -5,8 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from models.library import Library
-from config import Config
+from src.models.library import Library
+from src.config import Config
 
 config = Config()
 library = Library(media_dir=config.media_dir, index_path=config.index_path)
@@ -37,7 +37,7 @@ def scan(source):
 def import_video(source, metadata):
     """Import a single video with metadata"""
     import json
-    from models.video import Video
+    from src.models.video import Video
 
     metadata_dict = json.loads(metadata)
     video = Video.from_dict(metadata_dict)
