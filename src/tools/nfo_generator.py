@@ -1,68 +1,98 @@
 import os
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 import xml.etree.ElementTree as ET
-from typing import Dict, Any
-from dataclasses import asdict
-from scrapers.base import MediaMetadata
+from typing import Dict, Any, List
+from src.models.video import Video
 
+def generate_nfo(video: Video, media_path: str = None, media_type: str = "movie") -> str:
+    """生成 Jellyfin 兼容的 NFO 文件"""
+    root = ET.Element("movie")
 
-def generate_nfo(metadata: MediaMetadata, media_path: str, media_type: str = "movie") -> str:
-    """生成 NFO 文件"""
-    root = ET.Element("item")
+    def add_text(parent, tag, text):
+        if text:
+            elem = ET.SubElement(parent, tag)
+            elem.text = str(text)
+            return elem
+        return None
 
     # 基础信息
-    title = ET.SubElement(root, "title")
-    title.text = metadata.title
-
-    originaltitle = ET.SubElement(root, "originaltitle")
-    originaltitle.text = metadata.original_title
-
-    year = ET.SubElement(root, "year")
-    year.text = str(metadata.year) if metadata.year else ""
-
-    plot = ET.SubElement(root, "plot")
-    plot.text = metadata.plot
+    add_text(root, "title", video.title)
+    add_text(root, "originaltitle", video.original_title)
+    add_text(root, "year", str(video.year) if video.year else "")
+    add_text(root, "plot", video.plot)
+    add_text(root, "director", video.director)
 
     # 评分
-    rating = ET.SubElement(root, "rating")
-    rating.text = str(metadata.rating)
+    if video.rating:
+        add_text(root, "rating", str(video.rating))
+        ratings = ET.SubElement(root, "ratings")
+        rating_elem = ET.SubElement(ratings, "rating")
+        rating_elem.set("name", "javdb")
+        rating_elem.set("max", "5")
+        rating_elem.set("default", "true")
+        value_elem = ET.SubElement(rating_elem, "value")
+        value_elem.text = str(video.rating)
 
     # Genre
-    for g in metadata.genre:
-        genre = ET.SubElement(root, "genre")
-        genre.text = g
+    for g in video.genres:
+        add_text(root, "genre", g)
 
-    # 导演
-    if metadata.director:
-        director = ET.SubElement(root, "director")
-        director.text = metadata.director
+    # Tag (additional categorization)
+    for g in video.genres:
+        add_text(root, "tag", g)
 
     # 演员
-    for actor in metadata.actors:
+    for actor_name in video.actors:
         actor_elem = ET.SubElement(root, "actor")
-        name = ET.SubElement(actor_elem, "name")
-        name.text = actor
+        name_elem = ET.SubElement(actor_elem, "name")
+        name_elem.text = actor_name
+        type_elem = ET.SubElement(actor_elem, "type")
+        type_elem.text = "Actor"
 
-    # 媒体信息
-    if metadata.tmdb_id:
-        tmdbid = ET.SubElement(root, "tmdbid")
-        tmdbid.text = metadata.tmdb_id
+    # 发布日期
+    if video.release_date:
+        add_text(root, "premiered", video.release_date)
+        add_text(root, "releasedate", video.release_date)
+        add_text(root, "release", video.release_date)
 
-    if metadata.imdb_id:
-        imdbid = ET.SubElement(root, "imdbid")
-        imdbid.text = metadata.imdb_id
+    # 处理 extra 字段
+    extra = video.extra or {}
 
-    if metadata.tvdb_id:
-        tvdbid = ET.SubElement(root, "tvdbid")
-        tvdbid.text = metadata.tvdb_id
+    # 番號
+    catalog_number = extra.get("catalog_number") or video.catalog_number
+    if catalog_number:
+        add_text(root, "num", catalog_number)
+        add_text(root, "sorttitle", catalog_number)
+
+    # 片商/制作商
+    if extra.get("studio"):
+        add_text(root, "studio", extra["studio"])
+    if extra.get("maker"):
+        add_text(root, "maker", extra["maker"])
+
+    # 系列
+    if extra.get("series"):
+        add_text(root, "set", extra["series"])
+
+    # 标签
+    if extra.get("label"):
+        add_text(root, "label", extra["label"])
+
+    # 年龄分级
+    if extra.get("customrating"):
+        add_text(root, "customrating", extra["customrating"])
+        add_text(root, "mpaa", extra["customrating"])
+
+    # 封面 URL
+    if extra.get("cover"):
+        add_text(root, "cover", extra["cover"])
 
     # 保存 NFO
-    base_name = os.path.splitext(media_path)[0]
-    nfo_path = f"{base_name}.nfo"
+    if media_path:
+        base_name = os.path.splitext(media_path)[0]
+    else:
+        base_name = os.path.join(os.path.dirname(video.video_path), catalog_number) if catalog_number else ""
 
+    nfo_path = f"{base_name}.nfo"
     tree = ET.ElementTree(root)
     tree.write(nfo_path, encoding="utf-8", xml_declaration=True)
 
@@ -84,40 +114,38 @@ def read_nfo(nfo_path: str) -> Dict[str, Any]:
     def get_all_text(tag):
         return [el.text for el in root.findall(tag) if el.text]
 
+    # 提取 ratings
+    rating_elem = root.find(".//rating[@name='javdb']")
+    rating_value = ""
+    if rating_elem is not None:
+        value_elem = rating_elem.find("value")
+        if value_elem is not None:
+            rating_value = value_elem.text or ""
+
     return {
         "title": get_text("title"),
         "originaltitle": get_text("originaltitle"),
         "year": get_text("year"),
         "plot": get_text("plot"),
-        "rating": get_text("rating"),
+        "rating": rating_value or get_text("rating"),
         "genre": get_all_text("genre"),
         "director": get_text("director"),
         "actors": [a.find("name").text for a in root.findall("actor") if a.find("name") is not None and a.find("name").text],
-        "tmdbid": get_text("tmdbid"),
-        "imdbid": get_text("imdbid"),
-        "tvdbid": get_text("tvdbid")
+        "num": get_text("num"),
+        "studio": get_text("studio"),
+        "maker": get_text("maker"),
+        "set": get_text("set"),
+        "label": get_text("label"),
+        "customrating": get_text("customrating"),
+        "cover": get_text("cover"),
+        "premiered": get_text("premiered"),
+        "runtime": get_text("runtime"),
     }
 
 
-def update_nfo(nfo_path: str, metadata: MediaMetadata) -> str:
+def update_nfo(nfo_path: str, video: Video) -> str:
     """更新 NFO 文件"""
-    # 根据 nfo 路径反推媒体文件路径
-    if nfo_path.endswith(".nfo"):
-        base_path = nfo_path[:-4]  # 移除 .nfo 后缀
-    else:
-        base_path = nfo_path
+    if not os.path.exists(nfo_path):
+        raise FileNotFoundError(f"NFO not found: {nfo_path}")
 
-    # 查找对应的媒体文件
-    media_extensions = [".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v"]
-    media_path = None
-
-    for ext in media_extensions:
-        if os.path.exists(base_path + ext):
-            media_path = base_path + ext
-            break
-
-    if not media_path:
-        # 如果找不到媒体文件，使用 nfo 路径作为基准
-        media_path = base_path + ".mp4"
-
-    return generate_nfo(metadata, media_path)
+    return generate_nfo(video, media_path=nfo_path.replace(".nfo", ".mp4"))

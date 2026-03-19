@@ -8,13 +8,10 @@ aria2:
   rpc_secret: ""
 
 paths:
-  media_dir: "/media"
+  media_dir: "/media/jav/JAV_output"
   download_dir: "/downloads"
+  source_dir: "/media/jav"
+  index_path: "/app/config/library_index.jsonl"
 
-scrapers:
-  tmdb:
-    api_key: ""
-  tvdb:
-    api_key: ""
-  douban:
-    enabled: false
+bt_tracker:
+  update_url: "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt"

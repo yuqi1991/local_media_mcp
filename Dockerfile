@@ -13,8 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY src/ ./src/
 COPY config.yaml .
 
-# Create directories
-RUN mkdir -p /media /downloads
+# Create directories and config directory
+RUN mkdir -p /media/jav/JAV_output /downloads /media/jav /app/config
 
 ENV PYTHONUNBUFFERED=1
 ENV ARIA2_RPC_SECRET=${ARIA2_RPC_SECRET:-}
