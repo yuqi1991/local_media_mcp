@@ -1,0 +1,22 @@
+[project]
+name = "jav-scraper"
+version = "0.1.0"
+description = "JAV scraper CLI for JavDB"
+requires-python = ">=3.10"
+dependencies = [
+    "scrapling[playwright]>=0.4.2",
+    "playwright>=1.58.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=4.9.0",
+    "curl-cffi>=0.14.0",
+    "browserforge>=1.2.4",
+    "opencc-python-reimplemented>=0.1.7",
+    "python-dotenv>=1.2.2",
+    "click>=8.1.0",
+]
+
+[project.scripts]
+jav-scraper = "src.cli:main"
+
+[tool.uv]
+dev-dependencies = []
