@@ -13,6 +13,7 @@ dependencies = [
     "opencc-python-reimplemented>=0.1.7",
     "python-dotenv>=1.2.2",
     "click>=8.1.0",
+    "msgspec>=0.20.0",
 ]
 
 [project.scripts]
