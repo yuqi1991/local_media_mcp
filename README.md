@@ -1,19 +1,8 @@
 # Media MCP Server
 
-一个运行在 Docker 容器中的 MCP 服务器，用于管理多媒体库，支持元数据生成和 Aria2 下载管理。
+一个运行在 Docker 容器中的 MCP 服务器，用于管理多媒体库，支持影片入库和 Aria2 下载管理。
 
 ## 功能特性
-
-### 文件操作
-- `list_dir` - 列出目录内容
-- `move_file` - 移动/重命名文件
-- `copy_file` - 复制文件
-- `delete_file` - 删除文件
-- `create_dir` - 创建目录
-- `get_file_info` - 获取文件信息
-
-### 媒体库扫描
-- `scan_media_library` - 扫描指定目录，返回所有媒体文件（视频+封面+nfo）
 
 ### 下载管理
 - `create_download` - 创建下载任务
@@ -22,71 +11,53 @@
 - `resume_download` - 恢复下载
 - `cancel_download` - 取消下载
 - `get_download_status` - 获取下载状态
-
-### 下载配置
-- `get_aria2_config` - 获取当前 Aria2 配置
-- `set_aria2_speed_limit` - 设置下载/上传速度限制
 - `get_bt_trackers` - 获取 BT tracker 列表
-- `update_bt_tracker` - 更新 BT tracker 列表
+- `update_bt_trackers` - 从 GitHub 更新 BT tracker 列表
+- `restart_aria2` - 重启 Aria2 服务
+
+### 影片入库
+- `scan_source_dir` - 扫描源目录，返回未入库的视频文件
+- `import_video` - 导入影片到媒体库（生成 NFO、封面）
+- `list_library_videos` - 列出库中所有影片
+- `get_video` - 获取指定影片信息
+- `search_videos` - 搜索影片
+- `get_library_stats` - 获取媒体库统计信息
+- `remove_video` - 从库中移除影片
 
 ### 元数据管理
-- `scrape_metadata` - 在线削刮元数据（支持 TMDB/TVDB/豆瓣）
-- `manual_metadata` - 手动填写元数据并写入 nfo
-- `download_poster` - 下载/更新封面图片
-- `read_nfo` - 读取 NFO 文件
-- `update_nfo` - 更新 NFO 文件
+- `update_video_metadata` - 更新影片元数据
+- `download_poster` - 下载封面图片
+- `read_nfo_file` - 读取 NFO 文件
+
+### CLI 命令
+```bash
+python -m src scan --source /path/to/downloads
+python -m src import-video --source /path/to/video.mp4 --metadata '{"title":"...", "extra":{"catalog_number":"ABC-123"}}'
+python -m src list-videos
+python -m src stats
+```
+
+## 架构
+
+```
+三层架构：
+上层 (MCP / CLI)
+    ↓
+中层 (Video 类、Library 类)
+    ↓
+底层 (基础文件操作)
+```
+
+削刮能力由 LLM Agent 通过独立 Skill 在性能充足的机器上执行后，将结构化数据发给 MCP。
 
 ## 技术栈
 
 - Python 3.11
 - FastMCP (MCP 框架)
 - Aria2 (下载器)
-- ElementTree (NFO 生成)
+- Pillow (图片处理)
 
-## Docker 镜像
-
-镜像已自动构建并推送到 GitHub Container Registry。
-
-### 使用预构建镜像
-
-```bash
-# 拉取镜像
-docker pull ghcr.io/yuqi1991/local_media_mcp:latest
-
-# 运行
-docker run -d \
-  --name media-mcp \
-  -v /path/to/media:/media \
-  -v /path/to/downloads:/downloads \
-  -p 8000:8000 \
-  -e ARIA2_RPC_SECRET=your_secret \
-  -e TMDB_API_KEY=your_key \
-  ghcr.io/yuqi1991/local_media_mcp:latest
-```
-
-### 版本标签
-
-- `latest` - 最新稳定版
-- `v1.0.0` - 语义化版本
-- `sha-xxxxxxx` - 指定提交
-
-## 快速开始
-
-### 1. 配置环境变量
-
-```bash
-cp .env.example .env
-```
-
-编辑 `.env` 文件，填写必要的 API keys：
-
-```bash
-ARIA2_RPC_SECRET=your_secret_here
-TMDB_API_KEY=your_tmdb_key
-TVDB_API_KEY=your_tvdb_key
-```
-
-### 2. Docker 部署
+## Docker 部署
 
 ```bash
 # 构建并启动
@@ -99,15 +70,11 @@ docker-compose logs -f
 docker-compose down
 ```
 
-### 3. 配置媒体目录
+### 环境变量
 
-在 `docker-compose.yaml` 中修改媒体库挂载路径：
-
-```yaml
-volumes:
-  - ./config:/app/config
-  - /path/to/your/media:/media   # 修改为你的媒体目录
-  - ./downloads:/downloads
+```bash
+ARIA2_RPC_SECRET=your_secret    # Aria2 RPC 密钥
+MCP_AUTH_TOKEN=your_token       # MCP 认证令牌
 ```
 
 ## MCP 客户端配置
@@ -124,7 +91,6 @@ http://localhost:8000/mcp
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-# 连接 MCP 服务
 params = StdioServerParameters(
     command="docker",
     args=["exec", "-i", "media-mcp", "python", "-m", "src.main"]
@@ -134,14 +100,20 @@ async with stdio_client(params) as (read, write):
     async with ClientSession(read, write) as session:
         await session.initialize()
 
-        # 列出目录
-        result = await session.call_tool("list_dir", {"path": "/media"})
+        # 扫描源目录
+        result = await session.call_tool("scan_source_dir", {"source_dir": "/media/jav"})
 
-        # 创建下载
-        result = await session.call_tool("create_download", {
-            "uri": "magnet:?xt=urn:btih:...",
-            "filename": "movie.mp4"
+        # 导入影片
+        result = await session.call_tool("import_video", {
+            "metadata": {
+                "title": "影片标题",
+                "extra": {"catalog_number": "ABC-123", "studio": "片商"}
+            },
+            "video_path": "/media/jav/ABC-123.mp4"
         })
+
+        # 查看下载状态
+        result = await session.call_tool("list_downloads")
 ```
 
 ## 目录结构
@@ -151,16 +123,15 @@ media-mcp/
 ├── src/
 │   ├── main.py              # MCP 入口
 │   ├── config.py            # 配置管理
+│   ├── __main__.py         # CLI 入口
+│   ├── models/
+│   │   ├── video.py        # Video 数据类
+│   │   └── library.py      # Library 类
 │   ├── tools/
-│   │   ├── file_ops.py      # 文件操作
-│   │   ├── media_scanner.py # 媒体扫描
-│   │   ├── aria2_manager.py # Aria2 管理
+│   │   ├── download.py     # 下载管理
 │   │   └── nfo_generator.py # NFO 生成
-│   └── scrapers/
-│       ├── base.py          # 基础类
-│       ├── tmdb_scraper.py  # TMDB 削刮
-│       ├── tvdb_scraper.py  # TVDB 削刮
-│       └── douban_scraper.py # 豆瓣削刮
+│   └── cli/
+│       └── commands.py     # CLI 命令
 ├── tests/                   # 测试
 ├── config.yaml              # 配置文件
 ├── Dockerfile              # Docker 镜像
@@ -168,26 +139,50 @@ media-mcp/
 └── requirements.txt        # Python 依赖
 ```
 
+## 配置 (config.yaml)
+
+```yaml
+server:
+  host: "0.0.0.0"
+  port: 8000
+
+aria2:
+  rpc_host: "localhost"
+  rpc_port: 6800
+  rpc_secret: ""
+
+paths:
+  media_dir: "/media/jav/JAV_output"  # 媒体库目录
+  download_dir: "/downloads"          # 下载目录
+  source_dir: "/media/jav"            # 源目录
+  index_path: "/app/config/library_index.jsonl"  # 索引文件
+
+bt_tracker:
+  update_url: "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt"
+```
+
 ## NFO 格式
 
-生成的 NFO 文件兼容 Jellyfin/Plex/Emby，结构如下：
+生成的 NFO 文件兼容 Jellyfin/Emby，支持 JAV 专用字段：
 
 ```xml
-<?xml version="1.0" ?>
-<item>
-  <title>电影标题</title>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<movie>
+  <title>影片标题</title>
   <originaltitle>原始标题</originaltitle>
   <year>2024</year>
   <plot>剧情简介</plot>
   <rating>8.5</rating>
-  <genre>动作</genre>
-  <genre>科幻</genre>
+  <genre>类型</genre>
   <director>导演</director>
-  <actor>
-    <name>演员1</name>
-  </actor>
-  <tmdbid>12345</tmdbid>
-</item>
+  <actor><name>演员</name></actor>
+  <num>ABC-123</num>
+  <studio>片商</studio>
+  <maker>制作商</maker>
+  <set>系列</set>
+  <customrating>JP-18+</customrating>
+  <cover>封面URL</cover>
+</movie>
 ```
 
 ## License
