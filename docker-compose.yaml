@@ -2,21 +2,22 @@ version: '3.8'
 
 services:
   media-mcp:
-    build: .
+    image: ghcr.io/yuqi1991/local_media_mcp:latest
     container_name: media-mcp
     volumes:
       - ./config:/app/config
-      - media:/media/jav
-      - downloads:/downloads
+      - ./aria2.conf:/app/config/aria2.conf
+      - /mnt/nas/home/miscs/jellyfin/jav:/media
+      - /mnt/nas/downloads:/downloads
     ports:
-      - "8000:8000"
+      - "0.0.0.0:9000:8000"
     environment:
-      - MEDIA_DIR=/media/jav
+      - MEDIA_DIR=/media
       - DOWNLOAD_DIR=/downloads
-      - SOURCE_DIR=/media/jav
+      - SOURCE_DIR=/downloads
       - INDEX_PATH=/app/config/library_index.jsonl
       - ARIA2_RPC_SECRET=${ARIA2_RPC_SECRET:-}
-      - MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN:-${ARIA2_RPC_SECRET:-}}
+      - MCP_AUTH_TOKEN=${ARIA2_RPC_SECRET:-}
     restart: unless-stopped
 
 volumes:

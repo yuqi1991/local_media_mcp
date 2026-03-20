@@ -2,20 +2,31 @@ import os
 import sys
 from pathlib import Path
 from typing import List, Dict, Any
-
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+# Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mcp.server import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
-from src.config import Config
-from src.models.library import Library
-from src.tools.download import DownloadManager
-from src.tools.nfo_generator import generate_nfo, read_nfo, update_nfo
-from src.models.video import Video
+from config import Config
+from tools.file_ops import (
+    list_dir as _list_dir,
+    move_file as _move_file,
+    copy_file as _copy_file,
+    delete_file as _delete_file,
+    create_dir as _create_dir,
+    get_file_info as _get_file_info,
+)
+from tools.media_scanner import scan_media_library as _scan_media_library
+from tools.aria2_manager import Aria2Manager
+from tools.nfo_generator import generate_nfo as _generate_nfo, read_nfo as _read_nfo, update_nfo as _update_nfo
+from scrapers.tmdb_scraper import TMDbScraper
+from scrapers.tvdb_scraper import TVDbScraper
+from scrapers.douban_scraper import DoubanScraper
+from scrapers.base import MediaMetadata
 
 config = Config()
 
@@ -26,31 +37,33 @@ class TokenAuthMiddleware(BaseHTTPMiddleware):
         self.token = token
 
     async def dispatch(self, request: Request, call_next):
+        # Skip auth if no token configured
         if not self.token:
             return await call_next(request)
+
+        # Check token from header
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
             if token == self.token:
                 return await call_next(request)
+
+        # Also check query parameter for SSE connections
         query_token = request.query_params.get("token")
         if query_token == self.token:
             return await call_next(request)
+
         return JSONResponse(
             {"error": "Unauthorized", "message": "Invalid or missing token"},
             status_code=401
         )
 
-# Initialize managers
-download_manager = DownloadManager(
-    host=config.aria2_rpc_host,
-    port=config.aria2_rpc_port,
-    secret=config.aria2_secret
-)
 
-library = Library(
-    media_dir=config.media_dir,
-    index_path=config.index_path
+# Initialize Aria2 manager
+aria2_manager = Aria2Manager(
+    host="localhost",
+    port=6800,
+    secret=config.aria2_secret
 )
 
 mcp = FastMCP(
@@ -61,186 +74,184 @@ mcp = FastMCP(
     ),
 )
 
-# === Download Management Tools ===
 
+@mcp.tool()
+def list_dir(path: str) -> List[Dict[str, Any]]:
+    """列出目录内容"""
+    return _list_dir(path)
+
+
+@mcp.tool()
+def move_file(src: str, dst: str) -> Dict[str, str]:
+    """移动/重命名文件"""
+    return _move_file(src, dst)
+
+
+@mcp.tool()
+def copy_file(src: str, dst: str) -> Dict[str, str]:
+    """复制文件"""
+    return _copy_file(src, dst)
+
+
+@mcp.tool()
+def delete_file(path: str) -> Dict[str, str]:
+    """删除文件或目录"""
+    return _delete_file(path)
+
+
+@mcp.tool()
+def create_dir(path: str) -> Dict[str, str]:
+    """创建目录"""
+    return _create_dir(path)
+
+
+@mcp.tool()
+def get_file_info(path: str) -> Dict[str, Any]:
+    """获取文件信息"""
+    return _get_file_info(path)
+
+
+# Media library scanning
+@mcp.tool()
+def scan_media_library(path: str, recursive: bool = True) -> List[Dict[str, Any]]:
+    """扫描媒体库，返回所有媒体文件（视频+封面+nfo）"""
+    return _scan_media_library(path, recursive)
+
+
+# Download management
 @mcp.tool()
 def create_download(uri: str, filename: str = None, dir: str = None) -> Dict[str, Any]:
     """创建下载任务"""
     if dir is None:
         dir = config.download_dir
-    return download_manager.create_download(uri, filename, dir)
+    return aria2_manager.create_download(uri, filename, dir)
+
 
 @mcp.tool()
 def list_downloads(status: str = None) -> List[Dict[str, Any]]:
     """列出下载任务"""
-    return download_manager.list_downloads(status)
+    return aria2_manager.list_downloads(status)
+
 
 @mcp.tool()
 def pause_download(gid: str) -> Dict[str, str]:
     """暂停下载"""
-    return download_manager.pause_download(gid)
+    return aria2_manager.pause_download(gid)
+
 
 @mcp.tool()
 def resume_download(gid: str) -> Dict[str, str]:
     """恢复下载"""
-    return download_manager.resume_download(gid)
+    return aria2_manager.resume_download(gid)
+
 
 @mcp.tool()
 def cancel_download(gid: str) -> Dict[str, str]:
     """取消下载"""
-    return download_manager.cancel_download(gid)
+    return aria2_manager.cancel_download(gid)
+
 
 @mcp.tool()
 def get_download_status(gid: str) -> Dict[str, Any]:
     """获取下载状态"""
-    return download_manager.get_download_status(gid)
+    return aria2_manager.get_download_status(gid)
+
+
+# Download configuration
+@mcp.tool()
+def get_aria2_config() -> Dict[str, Any]:
+    """获取当前 Aria2 配置"""
+    return aria2_manager.get_global_options()
+
+
+@mcp.tool()
+def set_aria2_speed_limit(download_limit: str = None, upload_limit: str = None) -> Dict[str, str]:
+    """设置下载/上传速度限制"""
+    return aria2_manager.set_speed_limit(download_limit, upload_limit)
+
 
 @mcp.tool()
 def get_bt_trackers() -> List[str]:
     """获取当前 BT tracker 列表"""
-    return download_manager.get_bt_trackers()
+    return aria2_manager.get_bt_trackers()
+
 
 @mcp.tool()
-def update_bt_trackers(source_url: str = "https://raw.githubusercontent.com/ngosang/trackerslist/master/trackers_best.txt") -> Dict[str, Any]:
-    """从 GitHub 更新 BT tracker 列表并重启 aria2"""
-    result = download_manager.update_bt_trackers(source_url)
-    if result.get("count", 0) > 0:
-        download_manager.restart_aria2()
-    return result
+def update_bt_tracker(trackers: List[str]) -> Dict[str, Any]:
+    """更新 BT tracker 列表"""
+    return aria2_manager.update_bt_trackers(trackers)
+
+
+# Metadata scraping
+@mcp.tool()
+def scrape_metadata(filename: str, source: str = "tmdb", year: int = None) -> List[Dict[str, Any]]:
+    """在线削刮元数据（TMDB/TVDB/豆瓣）"""
+    from dataclasses import asdict
+    query = os.path.splitext(os.path.basename(filename))[0]
+
+    if source == "tmdb":
+        scraper = TMDbScraper(config.tmdb_api_key)
+        return [asdict(m) for m in scraper.search(query, year)]
+    elif source == "tvdb":
+        scraper = TVDbScraper(config.tvdb_api_key)
+        return [asdict(m) for m in scraper.search(query, year)]
+    elif source == "douban":
+        scraper = DoubanScraper()
+        return [asdict(m) for m in scraper.search(query, year)]
+    else:
+        raise ValueError(f"Unknown source: {source}")
+
 
 @mcp.tool()
-def restart_aria2() -> Dict[str, str]:
-    """重启 aria2 服务"""
-    return download_manager.restart_aria2()
+def manual_metadata(media_path: str, metadata: Dict[str, Any]) -> str:
+    """手动填写元数据并写入 nfo"""
+    meta = MediaMetadata(**metadata)
+    return _generate_nfo(meta, media_path)
 
-# === Library Management Tools ===
-
-@mcp.tool()
-def scan_source_dir(source_dir: str) -> List[Dict[str, Any]]:
-    """扫描源目录，返回未入库的视频文件列表"""
-    return library.scan_source_dir(source_dir)
 
 @mcp.tool()
-def import_video(metadata: Dict[str, Any], video_path: str = None) -> Dict[str, Any]:
-    """导入影片到媒体库"""
-    video = Video.from_dict(metadata)
-    if not video.catalog_number:
-        return {"error": "catalog_number is required"}
-    imported = library.import_video(video, source_path=video_path)
-
-    # 生成 NFO
-    if imported.video_path:
-        try:
-            imported.nfo_path = generate_nfo(imported, imported.video_path)
-        except Exception as e:
-            return {"error": str(e), "catalog_number": imported.catalog_number}
-
-    # 下载封面 (如果提供了 poster_url)
-    if imported.poster_url:
-        try:
-            from PIL import Image
-            from io import BytesIO
-            import requests as req
-            resp = req.get(imported.poster_url, timeout=30)
-            img = Image.open(BytesIO(resp.content))
-            img.save(imported.poster_path)
-        except Exception:
-            pass  # 忽略封面下载失败
-
-    return {
-        "catalog_number": imported.catalog_number,
-        "status": "imported",
-        "video_path": imported.video_path,
-        "nfo_path": imported.nfo_path,
-    }
-
-@mcp.tool()
-def list_library_videos() -> List[Dict[str, Any]]:
-    """列出库中所有影片"""
-    return [v.to_dict() for v in library.list_videos()]
-
-@mcp.tool()
-def get_video(catalog_number: str) -> Dict[str, Any]:
-    """获取指定影片信息"""
-    video = library.get_video(catalog_number)
-    if video:
-        return video.to_dict()
-    return {"error": "not found"}
-
-@mcp.tool()
-def search_videos(query: str) -> List[Dict[str, Any]]:
-    """搜索影片"""
-    return [v.to_dict() for v in library.search(query)]
-
-@mcp.tool()
-def get_library_stats() -> Dict[str, Any]:
-    """获取媒体库统计信息"""
-    return library.get_stats()
-
-@mcp.tool()
-def remove_video(catalog_number: str) -> Dict[str, str]:
-    """从库中移除影片"""
-    success = library.remove_video(catalog_number)
-    if success:
-        return {"catalog_number": catalog_number, "status": "removed"}
-    return {"catalog_number": catalog_number, "error": "not found"}
-
-@mcp.tool()
-def update_video_metadata(catalog_number: str, metadata: Dict[str, Any]) -> Dict[str, str]:
-    """更新影片元数据"""
-    video = library.get_video(catalog_number)
-    if not video:
-        return {"error": "not found"}
-
-    # 合并更新
-    for key, value in metadata.items():
-        if hasattr(video, key):
-            setattr(video, key, value)
-        else:
-            video.extra[key] = value
-
-    # 重新生成 NFO
-    if video.nfo_path and os.path.exists(os.path.dirname(video.nfo_path)):
-        update_nfo(video.nfo_path, video)
-
-    return {"catalog_number": catalog_number, "status": "updated"}
-
-@mcp.tool()
-def download_poster(catalog_number: str, poster_url: str) -> Dict[str, str]:
+def download_poster(poster_url: str, media_path: str) -> str:
     """下载封面图片"""
-    video = library.get_video(catalog_number)
-    if not video:
-        return {"error": "not found"}
+    import requests
+    from PIL import Image
+    from io import BytesIO
 
-    try:
-        from PIL import Image
-        from io import BytesIO
-        import requests as req
-        resp = req.get(poster_url, timeout=30)
-        img = Image.open(BytesIO(resp.content))
-        poster_path = os.path.join(library.media_dir, catalog_number, "poster.jpg")
-        os.makedirs(os.path.dirname(poster_path), exist_ok=True)
-        img.save(poster_path)
-        return {"poster_path": poster_path}
-    except Exception as e:
-        return {"error": str(e)}
+    resp = requests.get(poster_url)
+    img = Image.open(BytesIO(resp.content))
+
+    base_name = os.path.splitext(media_path)[0]
+    poster_path = f"{base_name}-poster.jpg"
+
+    img.save(poster_path)
+    return poster_path
+
 
 @mcp.tool()
 def read_nfo_file(nfo_path: str) -> Dict[str, Any]:
     """读取 NFO 文件"""
-    return read_nfo(nfo_path)
+    return _read_nfo(nfo_path)
+
+
+@mcp.tool()
+def update_nfo(nfo_path: str, metadata: Dict[str, Any]) -> str:
+    """更新 NFO 文件"""
+    meta = MediaMetadata(**metadata)
+    return _update_nfo(nfo_path, meta)
+
 
 if __name__ == "__main__":
     import uvicorn
 
     app = mcp.streamable_http_app()
 
+    # Add token auth middleware if configured
     auth_token = os.environ.get("MCP_AUTH_TOKEN", os.environ.get("ARIA2_RPC_SECRET", ""))
     if auth_token:
         app.add_middleware(TokenAuthMiddleware, token=auth_token)
 
+    # 直接使用 uvicorn.run 简化
     uvicorn.run(
         app,
-        host=config.server_host,
-        port=config.server_port
+        host=config._config.get("server", {}).get("host", "0.0.0.0"),
+        port=config._config.get("server", {}).get("port", 8000)
     )

@@ -21,4 +21,4 @@ ENV ARIA2_RPC_SECRET=${ARIA2_RPC_SECRET:-}
 ENV MCP_AUTH_TOKEN=${MCP_AUTH_TOKEN:-}
 
 # Entry point: start aria2c then MCP server
-CMD ["sh", "-c", "aria2c --enable-rpc --rpc-listen-all --rpc-listen-port=6800 --rpc-allow-origin-all $([ -n \"$ARIA2_RPC_SECRET\" ] && echo --rpc-secret=$ARIA2_RPC_SECRET) --quiet & python -m src.main"]
+CMD ["sh", "-c", "aria2c --conf-path=/app/config/aria2.conf $([ -n \"$ARIA2_RPC_SECRET\" ] && echo --rpc-secret=$ARIA2_RPC_SECRET) --quiet & python -m src.main"]
